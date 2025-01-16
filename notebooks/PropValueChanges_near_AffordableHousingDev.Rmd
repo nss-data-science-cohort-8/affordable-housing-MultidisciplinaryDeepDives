@@ -150,24 +150,98 @@ AffordableHousing_geo
 
 ```
 
+Side note: Initially constructed in 1974. After rennovation, it reopened (placed in service) in 2013. 
+https://www.yardimatrix.com/property-types/multifamily/nashville/the-park-at-richards-road-850-richards-road-tn-37013--79489
+
+
+
+
+```{r}
+Price_n_Location <- Price_n_Location |>  
+                      add_column(Distance_to_TNA_20130015 = st_distance(Price_n_Location_geo, AffordableHousing_geo))
+Price_n_Location
+```
+
+```{r}
+Price_n_Location <- Price_n_Location |> 
+                      rename(Transaction_Price = price, Transaction_Date = ownerdate)
+Price_n_Location
+```
+
+
+```{r}
+HousesWithin2000ft <- Price_n_Location |> 
+                      mutate_at(c('Distance_to_TNA_20130015'), as.numeric) |> 
+                      filter(Distance_to_TNA_20130015 <= 609.6) |> 
+                      mutate(Within2000ft = 1)
+HousesWithin2000ft
+```
+
+
+```{r}
+HousesWithin2000ft_5to1YrBeforeReopening <- HousesWithin2000ft |> 
+                                            filter(Transaction_Date >= '2007-01-01') |> 
+                                            filter(Transaction_Date < '2012-01-01') |> 
+                                            mutate(AfterReopening_1to5Yr = 0)
+HousesWithin2000ft_5to1YrBeforeReopening
+```
+
+```{r}
+HousesWithin2000ft_1to5YrAfterReopening <- HousesWithin2000ft |> 
+                                            filter(Transaction_Date > '2014-12-31') |> 
+                                            filter(Transaction_Date <= '2019-12-31') |> 
+                                            mutate(AfterReopening_1to5Yr = 1)
+HousesWithin2000ft_1to5YrAfterReopening
+```
+
+
+
+```{r}
+HousesBetween2000n3000ft <- Price_n_Location |> 
+                      mutate_at(c('Distance_to_TNA_20130015'), as.numeric) |> 
+                      filter(Distance_to_TNA_20130015 <= 914.4) |> 
+                      filter(Distance_to_TNA_20130015 >= 609.6) |> 
+                      mutate(Within2000ft = 0)
+HousesBetween2000n3000ft
+```
+```{r}
+HousesBetween2000n3000ft_5to1YrBeforeReopening <- HousesBetween2000n3000ft |> 
+                                            filter(Transaction_Date >= '2007-01-01') |> 
+                                            filter(Transaction_Date < '2012-01-01') |> 
+                                            mutate(AfterReopening_1to5Yr = 0)
+HousesBetween2000n3000ft_5to1YrBeforeReopening
+```
+
+```{r}
+HousesBetween2000n3000ft_1to5YrAfterReopening <- HousesBetween2000n3000ft |> 
+                                            filter(Transaction_Date > '2014-12-31') |> 
+                                            filter(Transaction_Date <= '2019-12-31') |> 
+                                            mutate(AfterReopening_1to5Yr = 1)
+HousesBetween2000n3000ft_1to5YrAfterReopening
+```
+
+
+```{r}
+BinaryVarsAssignedTibble <- bind_rows(HousesWithin2000ft_5to1YrBeforeReopening, HousesWithin2000ft_1to5YrAfterReopening, HousesBetween2000n3000ft_5to1YrBeforeReopening, HousesBetween2000n3000ft_1to5YrAfterReopening)
+
+BinaryVarsAssignedTibble
+```
+
+
+Difference-in-Difference analysis of prices of houses within 2000ft vs. of houses between 2000ft and 3000ft from affordable housing after its grand reopening did not yield statistically significant result. 
+ 
+```{r}
+
+lr_HousingPrice_DiffinDiff_nearAffordableApt <- glm(Transaction_Price ~ Within2000ft + AfterReopening_1to5Yr + Within2000ft:AfterReopening_1to5Yr, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+
+summary(lr_HousingPrice_DiffinDiff_nearAffordableApt)
+
+```
 
 
 
 
 
-
-
-NEXT STEP:
-find the subsets of houses that are 
-(1) within 2000ft of affordable housing
-(2) b/t 2000 & 3000ft of affordable housing
-
-
-
-
-
-
-side note / clarification: crs = st_crs(CensusTracts) is using the CensusTracts' metadata to set up projection, not using the geo coordinates within the shape files. 
 
 
 
