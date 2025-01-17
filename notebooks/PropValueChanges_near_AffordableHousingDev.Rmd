@@ -18,6 +18,7 @@ library(MASS)
 library(AER)
 library(lme4)
 library(leaflet)
+library(lubridate)
 
 ```
 
@@ -99,16 +100,6 @@ Price_n_Location
 
 
 
-Let's extract the latitude and longitude using the str_extract function from stringr.
-
-```{r}
-# Burglaries2023 <- Burglaries2023 |> 
-#   mutate(
-#     latitude = as.numeric(str_extract(`Mapped Location`, "\\((.+),", group = 1)),
-#     longitude = as.numeric(str_extract(`Mapped Location`, ",(.+)\\)", group = 1))
-#     )
-```
-
 Now, we can plot these burglary incidents. Note that I'll start with the census tract plot and then add in the burglary incidents by using geom_point.
 
 ```{r}
@@ -158,81 +149,93 @@ https://www.yardimatrix.com/property-types/multifamily/nashville/the-park-at-ric
 
 ```{r}
 Price_n_Location <- Price_n_Location |>  
-                      add_column(Distance_to_TNA_20130015 = st_distance(Price_n_Location_geo, AffordableHousing_geo))
+                      add_column(Distance_to_AffordableHousingComp = st_distance(Price_n_Location_geo, AffordableHousing_geo))
 Price_n_Location
 ```
 
 ```{r}
 Price_n_Location <- Price_n_Location |> 
-                      rename(Transaction_Price = price, Transaction_Date = ownerdate)
+                      rename(Sale_Price = price, Sale_Date = ownerdate) # |> 
+                     # mutate(Sale_Year = year(ymd(Sale_Date)))
 Price_n_Location
 ```
 
 
 ```{r}
 HousesWithin2000ft <- Price_n_Location |> 
-                      mutate_at(c('Distance_to_TNA_20130015'), as.numeric) |> 
-                      filter(Distance_to_TNA_20130015 <= 609.6) |> 
+                      mutate_at(c('Distance_to_AffordableHousingComp'), as.numeric) |> 
+                      filter(Distance_to_AffordableHousingComp <= 609.6) |> 
                       mutate(Within2000ft = 1)
 HousesWithin2000ft
 ```
 
 
 ```{r}
-HousesWithin2000ft_5to1YrBeforeReopening <- HousesWithin2000ft |> 
-                                            filter(Transaction_Date >= '2007-01-01') |> 
-                                            filter(Transaction_Date < '2012-01-01') |> 
-                                            mutate(AfterReopening_1to5Yr = 0)
-HousesWithin2000ft_5to1YrBeforeReopening
+HousesWithin2000ft_5to1YrBeforeOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date >= '2007-01-01') |> 
+                                            filter(Sale_Date < '2012-01-01') |> 
+                                            mutate(AfterOpening_1to5Yr = 0)
+HousesWithin2000ft_5to1YrBeforeOpening
 ```
 
 ```{r}
-HousesWithin2000ft_1to5YrAfterReopening <- HousesWithin2000ft |> 
-                                            filter(Transaction_Date > '2014-12-31') |> 
-                                            filter(Transaction_Date <= '2019-12-31') |> 
-                                            mutate(AfterReopening_1to5Yr = 1)
-HousesWithin2000ft_1to5YrAfterReopening
+HousesWithin2000ft_1to5YrAfterOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date > '2014-12-31') |> 
+                                            filter(Sale_Date <= '2019-12-31') |>  
+                                            mutate(AfterOpening_1to5Yr = 1)
+HousesWithin2000ft_1to5YrAfterOpening
 ```
 
 
 
 ```{r}
 HousesBetween2000n3000ft <- Price_n_Location |> 
-                      mutate_at(c('Distance_to_TNA_20130015'), as.numeric) |> 
-                      filter(Distance_to_TNA_20130015 <= 914.4) |> 
-                      filter(Distance_to_TNA_20130015 >= 609.6) |> 
+                      mutate_at(c('Distance_to_AffordableHousingComp'), as.numeric) |> 
+                      filter(Distance_to_AffordableHousingComp <= 914.4) |> 
+                      filter(Distance_to_AffordableHousingComp >= 609.6) |> 
                       mutate(Within2000ft = 0)
 HousesBetween2000n3000ft
 ```
 ```{r}
-HousesBetween2000n3000ft_5to1YrBeforeReopening <- HousesBetween2000n3000ft |> 
-                                            filter(Transaction_Date >= '2007-01-01') |> 
-                                            filter(Transaction_Date < '2012-01-01') |> 
-                                            mutate(AfterReopening_1to5Yr = 0)
-HousesBetween2000n3000ft_5to1YrBeforeReopening
+HousesBetween2000n3000ft_5to1YrBeforeOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date >= '2007-01-01') |> 
+                                            filter(Sale_Date < '2012-01-01') |> 
+                                            mutate(AfterOpening_1to5Yr = 0)
+HousesBetween2000n3000ft_5to1YrBeforeOpening
 ```
 
 ```{r}
-HousesBetween2000n3000ft_1to5YrAfterReopening <- HousesBetween2000n3000ft |> 
-                                            filter(Transaction_Date > '2014-12-31') |> 
-                                            filter(Transaction_Date <= '2019-12-31') |> 
-                                            mutate(AfterReopening_1to5Yr = 1)
-HousesBetween2000n3000ft_1to5YrAfterReopening
+HousesBetween2000n3000ft_1to5YrAfterOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date > '2014-12-31') |> 
+                                            filter(Sale_Date <= '2019-12-31') |> 
+                                            mutate(AfterOpening_1to5Yr = 1)
+HousesBetween2000n3000ft_1to5YrAfterOpening
 ```
 
 
+
+
+
+
 ```{r}
-BinaryVarsAssignedTibble <- bind_rows(HousesWithin2000ft_5to1YrBeforeReopening, HousesWithin2000ft_1to5YrAfterReopening, HousesBetween2000n3000ft_5to1YrBeforeReopening, HousesBetween2000n3000ft_1to5YrAfterReopening)
+BinaryVarsAssignedTibble <- bind_rows(HousesWithin2000ft_5to1YrBeforeOpening, HousesWithin2000ft_1to5YrAfterOpening, HousesBetween2000n3000ft_5to1YrBeforeOpening, HousesBetween2000n3000ft_1to5YrAfterOpening)
 
 BinaryVarsAssignedTibble
 ```
 
 
-Difference-in-Difference analysis of prices of houses within 2000ft vs. of houses between 2000ft and 3000ft from affordable housing after its grand reopening did not yield statistically significant result. 
+Difference-in-Difference analysis of prices of houses within 2000ft of affordable housing complex TNA20130015 vs. prices of houses between 2000ft and 3000ft from affordable housing complex TNA20130015 after its grand reopening did not yield statistically significant result. 
  
 ```{r}
 
-lr_HousingPrice_DiffinDiff_nearAffordableApt <- glm(Transaction_Price ~ Within2000ft + AfterReopening_1to5Yr + Within2000ft:AfterReopening_1to5Yr, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+lr_HousingPrice_DiffinDiff_nearAffordableApt <- glm(Sale_Price ~ Within2000ft + AfterOpening_1to5Yr + Within2000ft:AfterOpening_1to5Yr, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+
+summary(lr_HousingPrice_DiffinDiff_nearAffordableApt)
+
+```
+```{r}
+
+lr_HousingPrice_DiffinDiff_nearAffordableApt <- glm(Sale_Price ~ Within2000ft + I(year(Sale_Date) - 2013) + Within2000ft:I(year(Sale_Date) - 2013) , family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
 
 summary(lr_HousingPrice_DiffinDiff_nearAffordableApt)
 
@@ -241,427 +244,274 @@ summary(lr_HousingPrice_DiffinDiff_nearAffordableApt)
 
 
 
-
-
-
-
-Now, to build our plot, we can use geom_sf.
-
 ```{r}
-CensusTracts |> 
-  ggplot() +
-  geom_sf() +
-  geom_sf(data = Burglaries2023_geo, size = 0.1)
+
+lr_HousingPrice_DiffinDiff_nearAffordableApt <- glm(Sale_Price ~ Within2000ft + I(year(Sale_Date) - 2013) + Within2000ft:I(year(Sale_Date) - 2013):AfterOpening_1to5Yr, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+
+summary(lr_HousingPrice_DiffinDiff_nearAffordableApt)
+
 ```
- 
 
 
 ```{r}
-# Burglaries2023_CensusTracts <- st_join(Burglaries2023_geo, CensusTracts, join = st_within)  
-# Burglaries2023_CensusTracts
-```  
-
-Alternatively, we can narrow down to incidents that are within Davidson County.
-CRS = Coordinate Ref System
-
-
-```{r}
-Burglaries2023_CensusTracts <- st_join(Burglaries2023_geo, CensusTracts, join = st_within, left = FALSE)  
-Burglaries2023_CensusTracts
-```  
-
-side note: in this case / step, we are using the geo coordinates in CensusTracts
-
+HousesWithin2000ft_1995to1YrBeforeOpening <- HousesWithin2000ft |> 
+                                        #    filter(Sale_Date >= '2007-01-01') |> 
+                                            filter(Sale_Date < '2012-01-01') |> 
+                                            mutate(AfterOpening_1YrPlus = 0)
+HousesWithin2000ft_1995to1YrBeforeOpening
+```
 
 
 ```{r}
-
-Burglaries2023_CensusTracts |> 
-                                filter(is.na(incident_number))  
-
+HousesWithin2000ft_1YrPlusAfterOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date > '2014-12-31') |> 
+                                        #    filter(Sale_Date <= '2019-12-31') |>  
+                                            mutate(AfterOpening_1YrPlus = 1)
+HousesWithin2000ft_1YrPlusAfterOpening
 ```
 
 
 
 
-
-
-
-
-
-Plotting of Burglary Incidents within Davidson County:
 ```{r}
-
-CensusTracts |> 
-  ggplot() +
-  geom_sf() +
-  geom_sf(data = Burglaries2023_CensusTracts, size = 0.1)
-
+HousesBetween2000n3000ft_1995to1YrBeforeOpening <- HousesBetween2000n3000ft |> 
+                                      #      filter(Sale_Date >= '2007-01-01') |> 
+                                            filter(Sale_Date < '2012-01-01') |> 
+                                            mutate(AfterOpening_1YrPlus = 0)
+HousesBetween2000n3000ft_1995to1YrBeforeOpening
 ```
- 
+
+
+
 
 ```{r}
-Burglaries2023_CensusTracts |> 
-  filter(is.na(incident_number))
+HousesBetween2000n3000ft_1YrPlusAfterOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date > '2014-12-31') |> 
+                                 #           filter(Sale_Date <= '2019-12-31') |> 
+                                            mutate(AfterOpening_1YrPlus = 1)
+HousesBetween2000n3000ft_1YrPlusAfterOpening
 ```
 
 
 ```{r}
-Burglaries2023_CensusTracts |> 
-  st_drop_geometry() |> 
-  group_by(GEOID) |> 
-  count(name = "incident_number") |> 
-  arrange(desc(incident_number))
+BinaryVarsAssignedTibble <- bind_rows(HousesWithin2000ft_1995to1YrBeforeOpening, HousesWithin2000ft_1YrPlusAfterOpening, HousesBetween2000n3000ft_1995to1YrBeforeOpening, HousesBetween2000n3000ft_1YrPlusAfterOpening)  
+
+BinaryVarsAssignedTibble
 ```
- 
-Finally, if we want to make an interactive map, we can use the leaflet library (<https://rstudio.github.io/leaflet/>).
+
+
+"Did the reopening of affordable apartments affect nearby property values differently than properties further away, controlling for general time trends?"
+
+
+RDD-Diff-in-Diff Hybrid running on the chassis of Diff-in-Diff:
+In a very targeted way, we specifically care about prices of houses 2000ft within Affordable Housing Complex/Apt after the Reopening of Affordable Housing Complex/Apt. 
 
 ```{r}
-library(leaflet)
+
+# lr_HousingPrice_RDD_DiffinDiff_nearAffordableApt <- glm(Sale_Price ~ Within2000ft + I(Sale_Year - 2013) + Within2000ft:I(Sale_Year - 2013):AfterOpening_1YrPlus, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+# 
+# summary(lr_HousingPrice_RDD_DiffinDiff_nearAffordableApt)
+
 ```
+
 
 ```{r}
-leaflet(data = Burglaries2023 |> 
-          drop_na(latitude) # |> 
-     #     filter(`Route Name` == "WEST END - WHITE BRIDGE")
-        ) |>  
-  addTiles() |> 
-  addMarkers(~longitude, 
-             ~latitude, 
-             popup = ~as.character(`incident_number`), 
-             label = ~as.character(`incident_number`)
-             )
+
+lr_HousingPrice_RDD_DiffinDiff_nearAffordableApt <- glm(Sale_Price ~ Within2000ft + I(year(Sale_Date) - 2013) + Within2000ft:I(year(Sale_Date) - 2013):AfterOpening_1YrPlus, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+
+summary(lr_HousingPrice_RDD_DiffinDiff_nearAffordableApt)
+
 ```
 
-You can also do marker clusters.
 
-```{r}
-leaflet(Burglaries2023 |> drop_na(longitude)) %>% 
-  addTiles() %>% 
-  addMarkers(
-    ~longitude,
-    ~latitude,
-    clusterOptions = markerClusterOptions(),
-    popup = ~as.character(`incident_number`), 
-    label = ~as.character(`incident_number`)
-  )
-```
+
+
+
 
 Part 2 -
 
+Given that the above affordable housing complex/apartment was a rebuild (instead of new construction), let's examine impact on pricing by a newly constructed affordable housing complex/apartment whose in service date precedes the 2008 real estate crash:
 
+```{r}
+NewlyConstructedAffordableHousing <- LIHTC |> filter(HUD_ID=='TNA20010150')
+NewlyConstructedAffordableHousing 
+```
+
+
+```{r}
+NewlyConstructedAffordableHousing_geo <- st_as_sf(
+  NewlyConstructedAffordableHousing |> drop_na(LATITUDE),
+  coords = c('LONGITUDE', 'LATITUDE'),
+  crs = st_crs(CensusTracts)
+)
+
+NewlyConstructedAffordableHousing_geo
+```
+
+```{r}
+Price_n_Location <- Price_n_Location |>  
+                      add_column(Distance_to_TNA20010150 = st_distance(Price_n_Location_geo, NewlyConstructedAffordableHousing_geo))
+Price_n_Location
+```
+
+
+```{r}
+HousesWithin2000ft <- Price_n_Location |> 
+                      mutate_at(c('Distance_to_TNA20010150'), as.numeric) |> 
+                      filter(Distance_to_TNA20010150 <= 609.6) |> 
+                      mutate(Within2000ft = 1)
+HousesWithin2000ft
+```
+
+
+```{r}
+HousesWithin2000ft_5to1YrBeforeOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date >= '1995-01-01') |> 
+                                            filter(Sale_Date < '2000-01-01') |> 
+                                            mutate(AfterOpening_1to5Yr = 0)
+HousesWithin2000ft_5to1YrBeforeOpening
+```
+
+```{r}
+HousesWithin2000ft_1to5YrAfterOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date > '2002-12-31') |> 
+                                            filter(Sale_Date <= '2007-12-31') |> 
+                                            mutate(AfterOpening_1to5Yr = 1)
+HousesWithin2000ft_1to5YrAfterOpening
+```
+
+
+
+
+
+```{r}
+HousesBetween2000n3000ft <- Price_n_Location |> 
+                      mutate_at(c('Distance_to_TNA20010150'), as.numeric) |> 
+                      filter(Distance_to_TNA20010150 <= 914.4) |> 
+                      filter(Distance_to_TNA20010150 >= 609.6) |> 
+                      mutate(Within2000ft = 0)
+HousesBetween2000n3000ft
+```
+
+```{r}
+HousesBetween2000n3000ft_5to1YrBeforeOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date >= '2007-01-01') |> 
+                                            filter(Sale_Date < '2012-01-01') |> 
+                                            mutate(AfterOpening_1to5Yr = 0)
+HousesBetween2000n3000ft_5to1YrBeforeOpening
+```
+
+
+
+
+
+```{r}
+HousesBetween2000n3000ft_1to5YrAfterOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date > '2002-12-31') |> 
+                                            filter(Sale_Date <= '2007-12-31') |> 
+                                            mutate(AfterOpening_1to5Yr = 1)
+HousesBetween2000n3000ft_1to5YrAfterOpening
+```
+
+
+```{r}
+BinaryVarsAssignedTibble_NewlyConstructed <- bind_rows(HousesWithin2000ft_5to1YrBeforeOpening, HousesWithin2000ft_1to5YrAfterOpening, HousesBetween2000n3000ft_5to1YrBeforeOpening, HousesBetween2000n3000ft_1to5YrAfterOpening)
+
+BinaryVarsAssignedTibble_NewlyConstructed
+```
+
+
+
+Difference-in-Difference analysis of prices of houses within 2000ft of affordable housing complex TNA20010150 vs. prices of houses between 2000ft and 3000ft from affordable housing complex TNA20010150 after its opening yielded statistically significant positive effect - meaning that houses within 2000ft of the affordable housing complex TNA20010150 on averaged transacted at $66704 higher than prices of houses situated between 2000ft and 3000ft from affordable housing complex TNA20010150. 
  
-
-Read in the CSV that contains data on Median Income and Population from Census:
-
-```{r}
-census <- read_csv("../data/census.csv")
-census
-```
-
-Preparing for inner join by 
-(1) making the column headers of primary key congruent:
-
 ```{r}
 
-Burglaries2023_CensusTracts <- Burglaries2023_CensusTracts  |>  
-  group_by(TRACTCE) |> 
-  summarize(num_burglaries = n_distinct(incident_number, na.rm = TRUE)) |> 
-  arrange(desc(num_burglaries))  |>  
-  rename(tract = TRACTCE)  |>  
-  right_join(census)
+lr_HousingPrice_DiffinDiff_nearNewlyConstructedAffordableApt <- glm(Sale_Price ~ Within2000ft + AfterOpening_1to5Yr + Within2000ft:AfterOpening_1to5Yr, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble_NewlyConstructed)
 
-Burglaries2023_CensusTracts
-
-```
-
-
-
-EDA: initial exploration ~
-
-
-Let's look at the distributions of population size by tract, since tracts with larger population may have more burglaries. 
-
-```{r}
-Burglaries2023_CensusTracts |> 
-  ggplot(aes(x = population)) +
-  geom_histogram()
-```
-
-Let's also peruse the distribution of median income: 
-
-```{r}
-Burglaries2023_CensusTracts |> 
-  ggplot(aes(x = median_income)) +
-  geom_histogram()
-```
-
-
-```{r}
-Burglaries2023_CensusTracts  |> 
-  arrange(population)
-```
-
-We need to drop rows with negative median income:
-
-```{r}
-
-Burglaries2023_CensusTracts <- Burglaries2023_CensusTracts  |> 
-  filter(population > 0, median_income > 0)
-
-```
-
-
-
-
-```{r}
- 
-Burglaries2023_CensusTracts |> 
-  ggplot(aes(x = median_income)) +
-  geom_histogram() 
-
-```
-
-
-
-
-
-```{r}
-
-Burglaries2023_CensusTracts |> 
-  ggplot(aes(x = num_burglaries)) +
-  geom_histogram()
-
-```
-
-
-```{r}
-Burglaries2023_CensusTracts |> 
-  ggplot(aes(x = median_income, y = num_burglaries)) +
-  geom_point()
-```
-
-
-And on a per thousand population basis.
-
-```{r}
-Burglaries2023_CensusTracts  |>  
-  mutate(burglaries_per_thousand = num_burglaries / (population/1000)) |> 
-  ggplot(aes(x = median_income, y = burglaries_per_thousand)) +
-  geom_point()
-```
-
-
-
-Aggregate data by census tract. Which census tract had the highest number of burglaries? 
-
-Ans: Census Tract 016000, which has 39 burglaries 
-
-```{r}
-Burglaries2023_CensusTracts |> 
-                    arrange(desc(num_burglaries)) |> 
-                    head(1)
-```
-
-
-
- 
-Which census tract had the highest number of burglaries per 1000 residents?
-
-Ans: Tract 016000 has the Incidence Proportion of 15.1750973 incidents per 1000 residents. 
-
-
-```{r}
-
-IncidenceProportion_byTract <- Burglaries2023_CensusTracts |> 
-                                  mutate(Incidents_Per_1000_Residents = num_burglaries / (population/1000)) |> 
-                                  arrange(desc(Incidents_Per_1000_Residents)) |> 
-                                  filter(Incidents_Per_1000_Residents != "Inf") 
-
-IncidenceProportion_byTract 
-
-```
-
-```{r}
-
-# IncidenceCountPer1000_DeDup_byTract <- IncidenceCountPer1000_byTract[!duplicated(IncidenceCountPer1000_byTract[c('Incidents_Per_1000_Residents')]), ]
-# IncidenceCountPer1000_DeDup_byTract
-# 
-# 
-
-
-IncidenceProportion_byTract_ArrangeByMedIncome <- IncidenceProportion_byTract   |> 
-                                                     arrange(median_income)  
-                                           
-IncidenceProportion_byTract_ArrangeByMedIncome
-
-```
-
-
-Finally, look at the relationship between median income and number of aggravated burglaries per tract. How would you describe this relationship?
-
-Ans: For every additional dollar in a census tract's Median Income, we see a decrease of -2.385e-05 burglary incidents per 1000 people (Incidence Proportion). 
-
-
-
-
-
-```{r}
-
-lr_MedIncome_IncidenceProportion <- glm(Incidents_Per_1000_Residents ~ median_income, family = gaussian(link = "identity"), data = IncidenceProportion_byTract_ArrangeByMedIncome)
-
-summary(lr_MedIncome_IncidenceProportion)
-
-```
-
-
-Bonus Question:
-
-Fit a Poisson regression model with target variable the rate of burglaries per census tract and with predictor the median income. Offset using the log of the population so that we are looking at the rate of burglaries per population instead of the number of burglaries. How can you interpret the meaning of the output? How do the estimates from the model compare to the observed data?
-
-
-Steps -
-
-1) take a natural log of population count
-2) divide incident count by natural log of population count
-
-
-
-### Regression Models
-
-   
-
-```{r}
- 
-
-Poisson_RegModel_IncidenceProp_corr_MedIncome <- glm(num_burglaries ~ median_income + population + population:median_income, family = "poisson", offset = log(population), data = IncidenceProportion_byTract_ArrangeByMedIncome)
-
-summary(Poisson_RegModel_IncidenceProp_corr_MedIncome)
-
-```
- 
- 
-Reduced model of examining the association between burglary incidence proportion and median income:
-
-
-```{r}
-burg_poisson <- glm(num_burglaries ~ median_income + offset(log(population)), 
-                    family = poisson, 
-                    data =  IncidenceProportion_byTract_ArrangeByMedIncome)
-
-summary(burg_poisson)
-```
-
-When Median Income = $40000
-and Population = 5000
-10.58664 Burglary Incidents tend to take place.  
-```{r}
-population = 5000
-exp(-5.184 + log(population) + 40000 * -2.434e-05)
-```
-  
-```{r}
-median_income <- seq(from = 20000, to = 180000, length.out = 5)
-population = 1000
-
-map(median_income, 
-    \(x) tibble(median_income = x, 
-                num_burglaries = 0:20, 
-                probability = dpois(0:20, 
-                                      lambda = predict(Poisson_RegModel_IncidenceProp_corr_MedIncome,
-                                                   newdata = tibble(median_income = x, population = population), type = "response")
-                                    )
-                )
-    ) |> 
-  bind_rows() |> 
-  ggplot(aes(x = num_burglaries, y = probability)) +
-  geom_col() +
-  facet_wrap(~median_income)
-```
-
-
-
-
-```{r}
-library(AER)
-
-dispersiontest(burg_poisson)
-```
-Extra: What about overdispersion? (That is, does the response really follow a Poisson distribution?)
-
-What could go wrong? If the model has overdispersion, our standard errors will be too small, which increases the chances of a Type I error.
-
-A good explanation is available in [this video](https://www.youtube.com/watch?v=uGKnoAw-PFQ). 
-
-
-
-```{r}
-
-Poisson_RegModel_IncidenceProp_corr_MedIncome_QP <- glm(num_burglaries ~ median_income + population + population:median_income, family = "quasipoisson", offset = log(population), data = IncidenceProportion_byTract_ArrangeByMedIncome)
-
-summary(Poisson_RegModel_IncidenceProp_corr_MedIncome_QP)
-
-```
-
-
-```{r} 
-
-library(MASS)
-
-Poisson_RegModel_IncidenceProp_corr_MedIncome_NB <- glm.nb(num_burglaries ~ median_income + population + population:median_income, offset(log(population)), data = IncidenceProportion_byTract_ArrangeByMedIncome)
-
-summary(Poisson_RegModel_IncidenceProp_corr_MedIncome_NB)
+summary(lr_HousingPrice_DiffinDiff_nearNewlyConstructedAffordableApt)
 
 ```
 
 
 ```{r}
 
-Poisson_RegModel_IncidenceProp_corr_MedIncome_NB$theta
+lr_HousingPrice_DiffinDiff_nearNewlyConstructedAffordableApt <- glm(Sale_Price ~ Within2000ft + I(year(Sale_Date) - 2001) + Within2000ft:I(year(Sale_Date) - 2001), family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble_NewlyConstructed)
+
+summary(lr_HousingPrice_DiffinDiff_nearNewlyConstructedAffordableApt)
 
 ```
 
- 
-```{r} 
-
-
-median_income <- seq(from = 20000, to = 180000, length.out = 5)
-population = 1000
-
-mu <- predict(Poisson_RegModel_IncidenceProp_corr_MedIncome_NB, 
-              newdata = tibble(median_income = median_income,
-                               population = population), 
-              type = "response")
-
-var <- mu + mu^2 / Poisson_RegModel_IncidenceProp_corr_MedIncome_NB$theta
-
-map(median_income, 
-    \(x) tibble(median_income = x, 
-                num_burglaries = 0:20, 
-                probability = dnbinom(0:20, 
-                                      mu = predict(Poisson_RegModel_IncidenceProp_corr_MedIncome_NB,
-                                                   newdata = tibble(median_income = x, population = population), type = "response"),
-                                      size = Poisson_RegModel_IncidenceProp_corr_MedIncome_NB$theta
-                                    )
-                )
-    ) |> 
-  bind_rows() |> 
-  ggplot(aes(x = num_burglaries, y = probability)) +
-  geom_col() +
-  facet_wrap(~median_income)
-
-
-``` 
-
- 
 
 
 
 
 
-Helpful footnote on Poisson Regression:
-https://generalizedregressionmodelingagency.github.io/GRMA/poisson-regression.html
 
-"Poisson family can be checked for overdispersion by comparing the residual deviance to the residual degrees of freedom. If the residual deviance is greater than the degrees of freedom, the model is overdispersed, and if the residual deviance is much less than the degrees of freedom, the model is underdispersed, a less frequent occurence. A large residual deviance compared to the residual degrees of freedom could also indicate a lack of fit, but this can be checked by eliminating outliers and fitting the model with the most explanatory variables possible. The residual deviance will still be large if overdispersion is the issue. Similarly, the Pearson goodness-of-fit statistic can be compared to the residual degrees of freedom to check for overdispersion. If the counts are small, so asymptotic approximations might not be accurate, large goodness-of-fit statistics generally indicate a poor model fit."
+
+
+
+
+```{r}
+HousesWithin2000ft_1995to1YrBeforeOpening <- HousesWithin2000ft |> 
+                                        #filter(Sale_Date >= '1995-01-01') |> 
+                                            filter(Sale_Date < '2000-01-01') |> 
+                                            mutate(AfterOpening_1YrPlus = 0)
+HousesWithin2000ft_1995to1YrBeforeOpening
+```
+
+
+```{r}
+HousesWithin2000ft_1YrPlusAfterOpening <- HousesWithin2000ft |> 
+                                            filter(Sale_Date > '2002-12-31') |> 
+                                           # filter(Sale_Date <= '2007-12-31') |>  
+                                            mutate(AfterOpening_1YrPlus = 1)
+HousesWithin2000ft_1YrPlusAfterOpening
+```
+
+
+
+
+```{r}
+HousesBetween2000n3000ft_1995to1YrBeforeOpening <- HousesBetween2000n3000ft |> 
+                                      #      filter(Sale_Date >= '1995-01-01') |> 
+                                            filter(Sale_Date < '2000-01-01') |> 
+                                            mutate(AfterOpening_1YrPlus = 0)
+HousesBetween2000n3000ft_1995to1YrBeforeOpening
+```
+
+
+
+
+```{r}
+HousesBetween2000n3000ft_1YrPlusAfterOpening <- HousesBetween2000n3000ft |> 
+                                            filter(Sale_Date > '2002-12-31') |> 
+                                           # filter(Sale_Date <= '2007-12-31') |> 
+                                            mutate(AfterOpening_1YrPlus = 1)
+HousesBetween2000n3000ft_1YrPlusAfterOpening
+```
+
+
+```{r}
+BinaryVarsAssignedTibble <- bind_rows(HousesWithin2000ft_1995to1YrBeforeOpening, HousesWithin2000ft_1YrPlusAfterOpening, HousesBetween2000n3000ft_1995to1YrBeforeOpening, HousesBetween2000n3000ft_1YrPlusAfterOpening)  
+
+BinaryVarsAssignedTibble
+```
+
+
+"Did the reopening of affordable apartments affect nearby property values differently than properties further away, controlling for general time trends?"
+
+
+RDD-Diff-in-Diff Hybrid running on the chassis of Diff-in-Diff:
+In a very targeted way, we specifically care about prices of houses 2000ft within Affordable Housing Complex/Apt after the Reopening of Affordable Housing Complex/Apt. 
+
+```{r}
+
+lr_HousingPrice_RDD_nearNewlyConstructedAffordableApt <- glm(Sale_Price ~ Within2000ft + I(year(Sale_Date) - 2001) + Within2000ft:I(year(Sale_Date) - 2001):AfterOpening_1YrPlus, family = gaussian(link = "identity"), data = BinaryVarsAssignedTibble)
+
+summary(lr_HousingPrice_RDD_nearNewlyConstructedAffordableApt)
+
+```
+
+
 
 
