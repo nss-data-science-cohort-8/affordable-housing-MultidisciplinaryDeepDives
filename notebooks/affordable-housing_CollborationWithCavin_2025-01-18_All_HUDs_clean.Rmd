@@ -1,0 +1,334 @@
+---
+title: "Affordable Housing"
+output: html_notebook
+---
+
+```{r}
+
+library(sf)
+library(tidyverse) 
+# library(MASS)
+library(AER)
+# library(lme4)
+# library(leaflet) 
+library(glue) 
+
+```
+
+1. filtered_sales.csv:
+	* Contains sales of single family homes from 1995 to October of 2022. 
+	* Non arms-length transactions and transactions for parcels which did not have a house on them at the time of sale. This was done by removing any transactions for $0, any transactions for which the adjacent appraisal values showed $0 for improvements, and any for which the transaction amount was less than half of the adjacent appraisals. 
+	* Optional: If you would like to work with the full dataset, all transactions are contained in full_sales.csv and the assessment values are in assessment.csv.
+	
+```{r}
+filtered_sales <- read_csv('../data/filtered_sales.csv') |>  distinct()
+
+filtered_sales
+```
+	
+	
+	2. LIHTC.csv
+	* Details of affordable housing developments funded by the LIHTC program.
+	* Refer to the included data dictionary for variable descriptions.
+
+```{r}
+lihtc <- read_csv('../data/LIHTC.csv') |> 
+  rename_all(tolower) |> 
+  distinct() |> 
+  mutate_at(vars(yr_pis, yr_alloc), ~na_if(., 8888)) |>
+  mutate_at(vars(yr_pis, yr_alloc), ~na_if(., 9999)) |> 
+  mutate(yr_pis = ymd(paste(yr_pis, '01-01', sep = '-'))) |> 
+  mutate(yr_alloc = ymd(paste(yr_alloc, '01-01', sep='-')))
+lihtc
+```
+	
+	
+	3. barnes.csv
+	* Contains information on rental properties that are completed and have more than 10 units which were funded by the Barnes Fund.
+
+```{r}
+barnes <- read_csv('../data/barnes.csv') |> 
+  distinct() |> 
+  rename(latitude = lat, longitude = lng)
+
+barnes
+```
+
+
+
+4. property_details.csv
+	* Contains detailed information on each property, including year built, square footage, number of rooms, and location (lat/lng)
+	
+	
+```{r}
+prop_details <- read_csv('../data/property_details.csv') |> distinct()
+
+prop_details  
+```
+	
+	For this project, you'll mimic the methodology of the working paper ["Does Federally Subsidized Rental Housing Depress Neighborhood Property Values?"](https://furmancenter.org/research/publication/does-federally-subsidized-rental-housing-depress-neighborhood-property), building a statistical model to explore the effect on sales price of a home nearby to an affordable housing development and using a difference in differences approach.
+	
+```{r}
+detailed_sales <- right_join(prop_details, filtered_sales, by='apn') |> 
+  mutate(
+    longitude = as.numeric(str_extract(centroid, 
+                                       "\\((.+),", group = 1)),
+    latitude = as.numeric(str_extract(centroid, 
+                                      ",(.+)\\)", group = 1)
+                           )) |> 
+    mutate(ownerdate = ymd(ownerdate)) |> 
+  dplyr::select(-centroid)
+
+detailed_sales
+```
+Obtain an atomic vector of HUD IDs, prepping for the looping step (using map)
+
+```{r}
+huds <- lihtc |> 
+  pull(hud_id)
+```
+
+	
+	
+	Look at the Park at Richards Road Apartments, which are contained in LIHTC.csv and have a HUD ID of TNA20130015. These were allocated in 2012 and placed in service in 2013.
+```{r}
+hud <- 'TNA20130015'
+```
+
+
+Find all homes that are less than 2000 feet from this development (our "treatment" group) and all homes that are between 2000 and 3000 feet from this development (our "control" group). For these homes, find all sales that took place between 5 and 1 year before this development was allocated and all sales for 1 to 5 years after it was placed in service. You can use these as the "pre" and "post" sales.
+
+
+```{r}
+detailed_sales_sf <- st_as_sf(
+  detailed_sales,
+  coords = c('longitude', 'latitude'), 
+  crs = st_crs(4326)
+  )
+```
+
+```{r}
+lihtc_sf <- st_as_sf(
+  lihtc,
+  coords = c('longitude', 'latitude'), 
+  crs = st_crs(4326)
+  )
+```
+
+```{r}
+barnes_sf <- st_as_sf(
+  barnes,
+  coords = c('longitude', 'latitude'), 
+  crs = st_crs(4326)
+  )
+```
+
+
+```{r}
+lihtc_sf_example <- lihtc_sf |> 
+  filter(hud_id == hud)
+
+lihtc_sf_example
+```
+```{r}
+affordable_func <-  function(x) {
+  example <- lihtc_sf |> 
+    filter(hud_id == x)
+  detailed_sales_sf <- detailed_sales_sf |> 
+  mutate(
+    distance_in_feet = as.numeric(
+      st_distance(
+        geometry, st_geometry(
+          example
+          )
+        ) * 3.28084
+      )
+    )  
+  pre_start = as.Date(example$yr_alloc - years(55))
+  pre_stop = as.Date(example$yr_alloc - years(0))
+
+  post_start =  as.Date(years(2) + example$yr_pis)
+  post_stop = as.Date(years(77) + example$yr_pis)
+
+  treat_dist = 2000
+  control_dist = 3000
+  
+  pre_treatment = detailed_sales_sf |> 
+  filter(distance_in_feet < treat_dist) |> 
+   filter(between(ownerdate, 
+                  pre_start, 
+                  pre_stop
+                 )
+          )
+  post_treatment = detailed_sales_sf |> 
+  filter(distance_in_feet < treat_dist) |> 
+   filter(between(ownerdate, 
+                  post_start, 
+                  post_stop
+                 )
+          )
+  pre_control = detailed_sales_sf |> 
+  filter(between(distance_in_feet, 
+                 treat_dist, 
+                 control_dist)) |> 
+  filter(between(ownerdate, 
+                 pre_start, 
+                 pre_stop
+                 )
+          )
+  post_control = detailed_sales_sf |> 
+  filter(between(distance_in_feet, 
+                 treat_dist, 
+                 control_dist)) |> 
+  filter(between(ownerdate, 
+                 post_start, 
+                 post_stop
+                 )
+          )
+  combined_data <- bind_rows(
+  mutate(pre_control, group = 0, time = 0),
+  mutate(post_control, group = 0, time = 1),
+  mutate(pre_treatment, group = 1, time = 0),
+  mutate(post_treatment, group = 1, time = 1)
+)
+  # combined_data <- combined_data |>
+  #   mutate(time = factor(time, levels = c(0, 1)))
+  # 
+}
+
+ 
+```
+
+```{r}
+huds_combine <- map(huds, affordable_func)
+
+huds_bind <- bind_rows(huds_combine, .id="Grouping_by_HUD_ID")
+```
+
+```{r}
+huds
+```
+
+
+
+
+Use a difference in differences approach to estimate whether this development had an impact on sales prices. Start with a basic model for the sales amount based on the pre/post and treatment/control variables only:
+Did the reopening of affordable housing complex/apt affect nearby property values differently than properties further away, controlling for general time trends?
+Can we conclude that the sales price for nearby homes was affected by the development? 
+
+Then, modify your code so that it works on other developments. Are your findings the same? 
+
+```{r}
+SingleHUD_DataSet <- affordable_func(hud)
+SingleHUD_DataSet
+```
+
+
+```{r}
+basic_model <-  lm(amount ~ group + time + (group:time), data = SingleHUD_DataSet)
+
+summary(basic_model)
+```
+
+
+After doing this basic model, you might try adding some predictors to your model, like the square footage or age of the home. You might also try using the log of the sales price as the target.
+
+
+```{r}
+age_model <-  lm(amount ~ year_built + group + time + (group:time), data = SingleHUD_DataSet)
+
+summary(age_model)
+```
+
+```{r}
+sq_model <-  lm(amount ~ square_footage + group + time + (group:time), data = SingleHUD_DataSet)
+
+summary(sq_model)
+```
+
+```{r}
+log_model <-  lm(log(amount) ~ group + time + (group:time), data = SingleHUD_DataSet)
+
+summary(log_model)
+```
+
+
+Finally, try instead of using a binary variable for before or after to use a tpost variable indicating the number of years before or after the development that the sale took place. Do your conclusions change?
+
+
+```{r}
+t_post_model <- lm(amount ~ time + I(ownerdate - 2013) + time:I(ownerdate - 2013), data = SingleHUD_DataSet)
+
+summary(t_post_model)
+```
+
+
+
+
+Next, rather than focusing on a single development at time, modify your model to consider all housing developments. Note that you'll likely want to include the sales year as an explanatory variable in your model.
+
+the time factor: 
+pre-/post-opening of nearby affordable housing complex
+
+
+the group factor: 
+Control Group = houses that inhabit the space between 2000 & 3000ft away from nearby affordable housing complex.
+Experimental Group = houses that inhabit the space within 2000ft from nearby affordable housing complex
+
+
+
+Since the oldest entry in the sales data set is from 1995, 1990 is the year that we are using to set x = 0. 
+
+
+```{r}
+lm(amount ~ time + group + I(year(ownerdate)-1990) + (time:group), data = huds_bind) |> 
+  summary() 
+```
+
+
+
+
+RDD-Diff-in-Diff Hybrid running on the chassis of Diff-in-Diff:
+In a very targeted way, we specifically care about prices of houses 2000ft within Affordable Housing Complex/Apt after the Reopening of Affordable Housing Complex/Apt. 
+
+
+
+```{r}
+
+lm(amount ~ group + I(year(ownerdate)-1990) + group:I(year(ownerdate)-1990):time, data = huds_bind) |> 
+    summary()
+
+```
+
+
+
+```{r}
+
+lm(log(amount) ~ group + I(year(ownerdate)-1990) + I(year_built - 1990) + building_condition + group:time + group:I(year(ownerdate)-1990):time, data = huds_bind) |> 
+    summary()
+ 
+```
+
+
+
+```{r}
+
+lm(log(amount) ~ group + C(year(ownerdate)) + C(year_built) + building_condition + group:time + group:C(year(ownerdate)):time, data = huds_bind) |> 
+    summary()
+
+```
+
+Side Note:
+Logging the sales price has 2 benefits:
+(1) Similar to the case of GDP calculation, logging the price brings high house prices closer to linear trend. 
+(2) Allows for comparison of house prices in percentage terms, which is more relevant to / helpful for discussing trends in price changes. 
+
+
+```{r}
+huds_bind |> 
+  group_by(group, time) |> 
+  summarize(mean(amount), n())
+```
+
+
+ 
